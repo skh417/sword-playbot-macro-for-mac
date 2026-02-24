@@ -1,0 +1,6 @@
+pyautogui
+pyperclip
+pillow
+easyocr
+numpy
+pynput
