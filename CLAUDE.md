@@ -29,9 +29,10 @@ python3 enhance_macro.py
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `TARGET_LEVEL` | `10` | 이 레벨 도달 시 매크로 자동 종료 |
-| `SUCCESS_TEXT` | `"강화에 성공"` | OCR로 감지할 성공 키워드 (봇 메시지: "강화에 성공하셨습니다") |
-| `FAIL_TEXT` | `"강화 파괴"` | OCR로 감지할 파괴 키워드 (봇 메시지: "〖💥강화 파괴💥〗") |
+| `TARGET_LEVEL` | `13` | 이 레벨 도달 시 매크로 자동 종료 |
+| `GOLD_LIMIT` | `0` | 낙은 골드가 이 값 미만이 되면 종료 (0 = 기능 비활성화) |
+| `SUCCESS_TEXT` | `"강화에 성공"` | OCR로 감지할 성공 키워드 |
+| `FAIL_TEXT` | `"강화 파괴"` | OCR로 감지할 파괴 키워드 |
 | `COMMAND` | `"/강화"` | 채팅방에 전송할 명령어 |
 | `STATS_FILE` | `"enhance_stats.json"` | 통계 저장 파일명 |
 
@@ -48,8 +49,9 @@ while not stop_requested:
     2. /강화 명령어 전송 (send_command)
     3. 0.3초 대기 후 OCR 폴링 시작 (최대 5초)
     4. 결과 판별 (success / destroy / waiting)
-    5. 목표 레벨 도달 시 break
-    6. 0.4~0.7초 랜덤 딜레이 후 다음 루프
+    5. 봇 응답에서 낙은 골드 파싱 → GOLD_LIMIT 이하면 break
+    6. 목표 레벨 도달 시 break
+    7. 0.4~0.7초 랜덤 딜레이 후 다음 루프
 ```
 
 ### 명령어 전송 방식 (`send_command`)

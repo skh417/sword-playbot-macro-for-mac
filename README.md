@@ -36,7 +36,8 @@ python3 enhance_macro.py
 | `3` / `reset` | 통계 초기화 |
 | `4` / `room` | 채팅방 변경 |
 | `5` / `goal` | 목표 레벨 변경 |
-| `6` / `quit` | 종료 |
+| `6` / `gold` | 골드 리밋 변경 |
+| `7` / `quit` | 종료 |
 
 ## 주요 설정값
 
@@ -44,6 +45,7 @@ python3 enhance_macro.py
 
 ```python
 TARGET_LEVEL = 13          # 이 레벨 도달 시 자동 종료
+GOLD_LIMIT   = 0           # 이 골드 미만이 되면 종료 (0 = 기능 비활성화)
 SUCCESS_TEXT = "강화에 성공"  # 봇 성공 메시지 키워드
 FAIL_TEXT    = "강화 파괴"   # 봇 파괴 메시지 키워드
 COMMAND      = "/강화"       # 채팅방에 전송할 명령어
