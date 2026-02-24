@@ -348,6 +348,9 @@ def check_response(texts, last_texts):
         return 'destroy', from_lvl, to_lvl
     if KEEP_TEXT in combined:
         return 'keep', from_lvl, to_lvl
+    # '[+0]' 패턴: OCR이 '강화 파괴' 키워드를 못 읽어도 파괴 감지
+    if re.search(r'\[\+0\]', combined):
+        return 'destroy', from_lvl, None
     if from_lvl is not None and to_lvl is not None and to_lvl > from_lvl:
         return 'success', from_lvl, to_lvl
     # new_texts에서 레벨 파싱 실패 시 전체 texts에서 재시도
@@ -487,6 +490,7 @@ def run_macro(stats):
 
     last_texts = []
     last_known_gold = None
+    just_destroyed = False  # 파괴 직후 루프에서 OCR 스캔 동기화 스킵 플래깅
 
     try:
         while not stop_requested:
@@ -499,13 +503,17 @@ def run_macro(stats):
             # 명령어 전송 전: OCR로 현재 레벨 동기화
             pre_screenshot = capture_chat_area(bounds)
             pre_texts = read_chat_text(pre_screenshot)
-            scanned_level = scan_current_level(pre_texts)
-            if scanned_level is not None and scanned_level != current_level:
-                if scanned_level > current_level:
-                    print(f"[동기화] +{current_level} -> +{scanned_level} (OCR 스캔)")
-                    current_level = scanned_level
-                else:
-                    print(f"[동기화 무시] OCR 스캔 +{scanned_level} < 현재 +{current_level} (오독 의심)")
+            if just_destroyed:
+                # 파괴 직후는 화면에 이전 레벨 메시지가 남아있어 OCR 오독 가능 -> 스킵
+                just_destroyed = False
+            else:
+                scanned_level = scan_current_level(pre_texts)
+                if scanned_level is not None and scanned_level != current_level:
+                    if scanned_level > current_level:
+                        print(f"[동기화] +{current_level} -> +{scanned_level} (OCR 스캔)")
+                        current_level = scanned_level
+                    else:
+                        print(f"[동기화 무시] OCR 스캔 +{scanned_level} < 현재 +{current_level} (오독 의심)")
             last_texts = pre_texts
 
             # 목표 레벨 도달 확인 (전송 전)
@@ -566,6 +574,7 @@ def run_macro(stats):
                 stats.record_destroy(destroy_lvl)
                 print(f"[파괴] +{destroy_lvl}에서 파괴됨")
                 current_level = 0
+                just_destroyed = True  # 다음 루프 OCR 스캔 스킵
             elif result == 'keep':
                 keep_lvl = from_lvl if from_lvl is not None else current_level
                 print(f"[유지] +{keep_lvl} 레벨 유지됨")
