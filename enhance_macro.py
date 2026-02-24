@@ -21,6 +21,7 @@ TARGET_CHAT_ROOM = ""
 TARGET_LEVEL = 13              # 이 레벨 도달하면 정지 (예: 4면 +4 도달시 정지)
 SUCCESS_TEXT = "강화에 성공"
 FAIL_TEXT = "강화 파괴"
+KEEP_TEXT  = "의 레벨이 유지되었습니다"
 STATS_FILE = "enhance_stats.json"
 COMMAND = "/강화"
 GOLD_LIMIT = 0                 # 이 골드 미만이 되면 정지 (0 = 기능 비활성화, 예: 100_000_000)
@@ -345,6 +346,8 @@ def check_response(texts, last_texts):
         return 'success', from_lvl, to_lvl
     if FAIL_TEXT in combined:
         return 'destroy', from_lvl, to_lvl
+    if KEEP_TEXT in combined:
+        return 'keep', from_lvl, to_lvl
     if from_lvl is not None and to_lvl is not None and to_lvl > from_lvl:
         return 'success', from_lvl, to_lvl
     # new_texts에서 레벨 파싱 실패 시 전체 texts에서 재시도
@@ -563,6 +566,9 @@ def run_macro(stats):
                 stats.record_destroy(destroy_lvl)
                 print(f"[파괴] +{destroy_lvl}에서 파괴됨")
                 current_level = 0
+            elif result == 'keep':
+                keep_lvl = from_lvl if from_lvl is not None else current_level
+                print(f"[유지] +{keep_lvl} 레벨 유지됨")
             elif result == 'waiting':
                 print("[시간초과] 응답 없음 - 화면 스캔으로 레벨 동기화")
                 combined_all = ' '.join(texts)
