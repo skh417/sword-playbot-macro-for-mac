@@ -295,6 +295,27 @@ def parse_level_change(texts):
     return None, None
 
 
+def scan_current_level(texts):
+    """화면 전체 OCR 텍스트에서 현재 강화 레벨을 읽어 반환.
+    '+N -> +M' 또는 '[+N]' 패턴 중 값을 사용. 못 찾으면 None 반환.
+    """
+    combined = ' '.join(texts)
+    arrow_patterns = [
+        r'\+(\d+)\s*→\s*\+(\d+)',
+        r'\+(\d+)\s*->\s*\+(\d+)',
+        r'\+(\d+)\s*▶\s*\+(\d+)',
+    ]
+    last_to = None
+    for pattern in arrow_patterns:
+        for m in re.finditer(pattern, combined):
+            last_to = int(m.group(2))
+    if last_to is not None:
+        return last_to
+    # '[+N]' 패턴 중 가장 큰 값 (화면 순서 불안정 -> max가 최신 강화 결과에 가까움)
+    matches = re.findall(r'\[\+(\d+)\]', combined)
+    if matches:
+        return max(int(x) for x in matches)
+    return None
 
 
 def parse_remaining_gold(texts):
@@ -326,7 +347,10 @@ def check_response(texts, last_texts):
         return 'destroy', from_lvl, to_lvl
     if from_lvl is not None and to_lvl is not None and to_lvl > from_lvl:
         return 'success', from_lvl, to_lvl
-
+    # new_texts에서 레벨 파싱 실패 시 전체 texts에서 재시도
+    from_lvl2, to_lvl2 = parse_level_change(texts)
+    if from_lvl2 is not None and to_lvl2 is not None and to_lvl2 > from_lvl2:
+        return 'success', from_lvl2, to_lvl2
     return 'unknown', None, None
 
 # ============================================================
@@ -469,6 +493,24 @@ def run_macro(stats):
                 print("[오류] 채팅방 창을 찾을 수 없음")
                 break
 
+            # 명령어 전송 전: OCR로 현재 레벨 동기화
+            pre_screenshot = capture_chat_area(bounds)
+            pre_texts = read_chat_text(pre_screenshot)
+            scanned_level = scan_current_level(pre_texts)
+            if scanned_level is not None and scanned_level != current_level:
+                if scanned_level > current_level:
+                    print(f"[동기화] +{current_level} -> +{scanned_level} (OCR 스캔)")
+                    current_level = scanned_level
+                else:
+                    print(f"[동기화 무시] OCR 스캔 +{scanned_level} < 현재 +{current_level} (오독 의심)")
+            last_texts = pre_texts
+
+            # 목표 레벨 도달 확인 (전송 전)
+            if current_level >= TARGET_LEVEL:
+                print(f"\n{'='*55}")
+                print(f"  목표 달성! +{current_level} (목표: +{TARGET_LEVEL})")
+                print(f"{'='*55}\n")
+                break
             # 명령어 전송
             gold_display = f", 골드: {last_known_gold:,}G" if last_known_gold is not None else ""
             print(f"[전송] {COMMAND} (현재: +{current_level}{gold_display})")
@@ -480,7 +522,7 @@ def run_macro(stats):
             from_lvl, to_lvl = None, None
             texts = last_texts.copy()
             snapshot_texts = last_texts.copy()
-            while result == 'waiting' and (time.time() - start_time) < 5:
+            while result in ('waiting', 'unknown') and (time.time() - start_time) < 5:
                 time.sleep(0.8)
                 screenshot = capture_chat_area(bounds)
                 texts = read_chat_text(screenshot)
