@@ -23,6 +23,7 @@ SUCCESS_TEXT = "강화에 성공"
 FAIL_TEXT = "강화 파괴"
 STATS_FILE = "enhance_stats.json"
 COMMAND = "/강화"
+GOLD_LIMIT = 0                 # 이 골드 미만이 되면 정지 (0 = 기능 비활성화, 예: 100_000_000)
 
 # 전역 상태
 stop_requested = False
@@ -294,6 +295,23 @@ def parse_level_change(texts):
     return None, None
 
 
+
+
+def parse_remaining_gold(texts):
+    """OCR 텍스트에서 '남은 골드: NNN,NNNG' 패턴을 찾아 정수 반환.
+    못 찾으면 None 반환.
+    """
+    combined = ' '.join(texts)
+    # '남은 골드: 273,400,000G' / '남은골드:273,400,000G' 등 대응
+    match = re.search(r'남은\s*골드\s*[:\uff1a]\s*([0-9,]+)\s*G', combined)
+    if match:
+        gold_str = match.group(1).replace(',', '')
+        try:
+            return int(gold_str)
+        except ValueError:
+            pass
+    return None
+
 def check_response(texts, last_texts):
     """새로운 메시지만 확인"""
     # 새 메시지 추출 (이전에 없던 것)
@@ -332,7 +350,7 @@ def input_thread_func():
 # 메인
 # ============================================================
 def main():
-    global TARGET_CHAT_ROOM, TARGET_LEVEL, stop_requested
+    global TARGET_CHAT_ROOM, TARGET_LEVEL, GOLD_LIMIT, stop_requested
 
     stats = EnhanceStats()
 
@@ -353,14 +371,16 @@ def main():
     # 메뉴
     while True:
         print("-" * 55)
-        print(f"  현재 설정: 채팅방={TARGET_CHAT_ROOM}, 목표=+{TARGET_LEVEL}")
+        gold_limit_str = f"{GOLD_LIMIT:,}G" if GOLD_LIMIT > 0 else "없음"
+        print(f"  현재 설정: 채팅방={TARGET_CHAT_ROOM}, 목표=+{TARGET_LEVEL}, 골드리밋={gold_limit_str}")
         print("-" * 55)
         print("  1. start  - 매크로 시작")
         print("  2. stats  - 통계 보기")
         print("  3. reset  - 통계 초기화")
         print("  4. room   - 채팅방 변경")
         print("  5. goal   - 목표 레벨 변경")
-        print("  6. quit   - 종료")
+        print("  6. gold   - 골드 리밋 변경")
+        print("  7. quit   - 종료")
         print("-" * 55)
 
         cmd = input("\n입력: ").strip().lower()
@@ -391,7 +411,18 @@ def main():
             except:
                 print("숫자를 입력하세요")
 
-        elif cmd in ['6', 'quit', 'q']:
+        elif cmd in ['6', 'gold']:
+            try:
+                val = input("골드 리밋 (숫자만, 0=비활성화): ").strip().replace(',', '')
+                GOLD_LIMIT = int(val)
+                if GOLD_LIMIT > 0:
+                    print(f"골드 리밋 변경: {GOLD_LIMIT:,}G 미만이 되면 정지")
+                else:
+                    print("골드 리밋 비활성화")
+            except:
+                print("숫자를 입력하세요")
+
+        elif cmd in ['7', 'quit', 'q']:
             print("\n종료합니다.")
             stats.print_stats()
             break
@@ -405,6 +436,10 @@ def run_macro(stats):
     print("\n" + "=" * 55)
     print(f"  매크로 시작 - 대상: {TARGET_CHAT_ROOM}")
     print(f"  목표: +{TARGET_LEVEL} 도달시 정지")
+    if GOLD_LIMIT > 0:
+        print(f"  골드 리밋: {GOLD_LIMIT:,}G 미만이 되면 정지")
+    else:
+        print("  골드 리밋: 없음")
     print("  정지: Ctrl+C")
     print("=" * 55 + "\n")
     # 현재 레벨 수동 입력
@@ -424,6 +459,7 @@ def run_macro(stats):
             print("  숫자를 입력하세요.")
 
     last_texts = []
+    last_known_gold = None
 
     try:
         while not stop_requested:
@@ -434,7 +470,8 @@ def run_macro(stats):
                 break
 
             # 명령어 전송
-            print(f"[전송] {COMMAND} (현재: +{current_level})")
+            gold_display = f", 골드: {last_known_gold:,}G" if last_known_gold is not None else ""
+            print(f"[전송] {COMMAND} (현재: +{current_level}{gold_display})")
             send_command(COMMAND, TARGET_CHAT_ROOM)
 
             time.sleep(0.3)
@@ -449,6 +486,19 @@ def run_macro(stats):
                 texts = read_chat_text(screenshot)
                 result, from_lvl, to_lvl = check_response(texts, snapshot_texts)
             last_texts = texts.copy()
+
+            # 골드 파싱 (새 텍스트에서)
+            new_texts_for_gold = [t for t in texts if t not in snapshot_texts]
+            parsed_gold = parse_remaining_gold(new_texts_for_gold)
+            if parsed_gold is not None:
+                last_known_gold = parsed_gold
+                gold_info = f"{last_known_gold:,}G"
+                print(f"[골드] 남은 골드: {gold_info}")
+                if GOLD_LIMIT > 0 and last_known_gold < GOLD_LIMIT:
+                    print(f"\n{'='*55}")
+                    print(f"  골드 리밋 도달! 남은 골드: {last_known_gold:,}G (리밋: {GOLD_LIMIT:,}G)")
+                    print(f"{'='*55}\n")
+                    break
 
             print(f"[DEBUG] OCR: {texts[-5:] if texts else 'None'}")
             print(f"[DEBUG] result={result}, from={from_lvl}, to={to_lvl}")
