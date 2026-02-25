@@ -300,22 +300,8 @@ def scan_current_level(texts, current_level=None):
     """화면 전체 OCR 텍스트에서 현재 강화 레벨을 읽어 반환.
     '+N -> +M' 또는 '[+N]' 패턴 중 값을 사용. 못 찾으면 None 반환.
     current_level 전달 시 ±3 범위 밖 값은 오인식으로 간주해 무시.
-    '강화 성공' 또는 '속보' 텍스트가 있으면 current_level + 1 반환.
     """
     combined = ' '.join(texts)
-    # '강화 성공' 또는 '속보': 성공 확정 → current_level + 1
-    if ('강화 성공' in combined or '속보' in combined) and current_level is not None:
-        # 화살표 패턴이 있으면 그걸 우선 사용
-        arrow_patterns = [
-            r'\+(\d+)\s*→\s*\+(\d+)',
-            r'\+(\d+)\s*->\s*\+(\d+)',
-            r'\+(\d+)\s*▶\s*\+(\d+)',
-        ]
-        for pattern in arrow_patterns:
-            m = re.search(pattern, combined)
-            if m:
-                return int(m.group(2))
-        return current_level + 1
     arrow_patterns = [
         r'\+(\d+)\s*→\s*\+(\d+)',
         r'\+(\d+)\s*->\s*\+(\d+)',
