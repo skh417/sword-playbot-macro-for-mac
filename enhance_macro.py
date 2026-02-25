@@ -296,11 +296,26 @@ def parse_level_change(texts):
     return None, None
 
 
-def scan_current_level(texts):
+def scan_current_level(texts, current_level=None):
     """화면 전체 OCR 텍스트에서 현재 강화 레벨을 읽어 반환.
     '+N -> +M' 또는 '[+N]' 패턴 중 값을 사용. 못 찾으면 None 반환.
+    current_level 전달 시 ±3 범위 밖 값은 오인식으로 간주해 무시.
+    '강화 성공' 또는 '속보' 텍스트가 있으면 current_level + 1 반환.
     """
     combined = ' '.join(texts)
+    # '강화 성공' 또는 '속보': 성공 확정 → current_level + 1
+    if ('강화 성공' in combined or '속보' in combined) and current_level is not None:
+        # 화살표 패턴이 있으면 그걸 우선 사용
+        arrow_patterns = [
+            r'\+(\d+)\s*→\s*\+(\d+)',
+            r'\+(\d+)\s*->\s*\+(\d+)',
+            r'\+(\d+)\s*▶\s*\+(\d+)',
+        ]
+        for pattern in arrow_patterns:
+            m = re.search(pattern, combined)
+            if m:
+                return int(m.group(2))
+        return current_level + 1
     arrow_patterns = [
         r'\+(\d+)\s*→\s*\+(\d+)',
         r'\+(\d+)\s*->\s*\+(\d+)',
@@ -311,11 +326,20 @@ def scan_current_level(texts):
         for m in re.finditer(pattern, combined):
             last_to = int(m.group(2))
     if last_to is not None:
+        if current_level is not None and abs(last_to - current_level) > 3:
+            print(f"[동기화 무시] 화살표 패턴 +{last_to} (현재 +{current_level}에서 ±3 초과, 오인식 의심)")
+            return None
         return last_to
-    # '[+N]' 패턴 중 가장 큰 값 (화면 순서 불안정 -> max가 최신 강화 결과에 가까움)
+    # '[+N]' 패턴 중 가장 큰 값
     matches = re.findall(r'\[\+(\d+)\]', combined)
     if matches:
-        return max(int(x) for x in matches)
+        candidates = [int(x) for x in matches]
+        if current_level is not None:
+            candidates = [v for v in candidates if abs(v - current_level) <= 3]
+            if not candidates:
+                print(f"[동기화 무시] '[+N]' 패턴 모두 ±3 초과 (현재 +{current_level}, 오인식 의심)")
+                return None
+        return max(candidates)
     return None
 
 
@@ -334,7 +358,7 @@ def parse_remaining_gold(texts):
             pass
     return None
 
-def check_response(texts, last_texts):
+def check_response(texts, last_texts, current_level=None):
     """새로운 메시지만 확인"""
     # 새 메시지 추출 (이전에 없던 것)
     new_texts = [t for t in texts if t not in last_texts]
@@ -348,6 +372,13 @@ def check_response(texts, last_texts):
         return 'destroy', from_lvl, to_lvl
     if KEEP_TEXT in combined:
         return 'keep', from_lvl, to_lvl
+    # '강화 성공' 또는 '속보' 키워드: OCR이 SUCCESS_TEXT를 못 읽어도 성공으로 확정
+    if '강화 성공' in combined or '속보' in combined:
+        if from_lvl is not None and to_lvl is not None:
+            return 'success', from_lvl, to_lvl
+        if current_level is not None:
+            return 'success', current_level, current_level + 1
+        return 'success', from_lvl, to_lvl
     # '[+0]' 패턴: OCR이 '강화 파괴' 키워드를 못 읽어도 파괴 감지
     if re.search(r'\[\+0\]', combined):
         return 'destroy', from_lvl, None
@@ -507,7 +538,7 @@ def run_macro(stats):
                 # 파괴 직후는 화면에 이전 레벨 메시지가 남아있어 OCR 오독 가능 -> 스킵
                 just_destroyed = False
             else:
-                scanned_level = scan_current_level(pre_texts)
+                scanned_level = scan_current_level(pre_texts, current_level)
                 if scanned_level is not None and scanned_level != current_level:
                     if scanned_level > current_level:
                         print(f"[동기화] +{current_level} -> +{scanned_level} (OCR 스캔)")
@@ -534,10 +565,10 @@ def run_macro(stats):
             texts = last_texts.copy()
             snapshot_texts = last_texts.copy()
             while result in ('waiting', 'unknown') and (time.time() - start_time) < 5:
-                time.sleep(0.8)
+                time.sleep(0.4)
                 screenshot = capture_chat_area(bounds)
                 texts = read_chat_text(screenshot)
-                result, from_lvl, to_lvl = check_response(texts, snapshot_texts)
+                result, from_lvl, to_lvl = check_response(texts, snapshot_texts, current_level)
             last_texts = texts.copy()
 
             # 골드 파싱 (새 텍스트에서)
@@ -592,7 +623,7 @@ def run_macro(stats):
                     print(f"  목표 달성 (동기화)! +{current_level} (목표: +{TARGET_LEVEL})")
                     print(f"{'='*55}\n")
                     break
-            time.sleep(random.uniform(0.4, 0.7))
+            time.sleep(random.uniform(0.3, 0.5))
 
     except KeyboardInterrupt:
         print("\n\n[중단됨]")
