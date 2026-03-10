@@ -259,14 +259,14 @@ def send_command(command, room_name):
             repeat with w in wins
                 if name of w contains "{room_name}" then
                     perform action "AXRaise" of w
-                    delay 0.2
+                    delay 0.1
                     set inputScroll to UI element 11 of w
                     set tf to UI element 1 of inputScroll
                     set value of tf to "{command}"
                     set focused of tf to true
-                    delay 0.6
+                    delay 0.4
                     key code 36
-                    delay 0.3
+                    delay 0.2
                     key code 36
                     exit repeat
                 end if
@@ -544,14 +544,14 @@ def run_macro(stats):
             print(f"[전송] {COMMAND} (현재: +{current_level}{gold_display})")
             send_command(COMMAND, TARGET_CHAT_ROOM)
 
-            time.sleep(0.3)
+            time.sleep(0.1)
             start_time = time.time()
             result = 'waiting'
             from_lvl, to_lvl = None, None
             texts = last_texts.copy()
             snapshot_texts = last_texts.copy()
             while result in ('waiting', 'unknown') and (time.time() - start_time) < 5:
-                time.sleep(0.4)
+                time.sleep(0.2)
                 screenshot = capture_chat_area(bounds)
                 texts = read_chat_text(screenshot)
                 result, from_lvl, to_lvl = check_response(texts, snapshot_texts, current_level)
@@ -569,9 +569,6 @@ def run_macro(stats):
                     print(f"  골드 리밋 도달! 남은 골드: {last_known_gold:,}G (리밋: {GOLD_LIMIT:,}G)")
                     print(f"{'='*55}\n")
                     break
-
-            print(f"[DEBUG] OCR: {texts[-5:] if texts else 'None'}")
-            print(f"[DEBUG] result={result}, from={from_lvl}, to={to_lvl}")
 
             if result == 'success':
                 if from_lvl is not None and to_lvl is not None:
@@ -609,7 +606,7 @@ def run_macro(stats):
                     print(f"  목표 달성 (동기화)! +{current_level} (목표: +{TARGET_LEVEL})")
                     print(f"{'='*55}\n")
                     break
-            time.sleep(random.uniform(0.3, 0.5))
+            time.sleep(random.uniform(0.1, 0.2))
 
     except KeyboardInterrupt:
         print("\n\n[중단됨]")
