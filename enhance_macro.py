@@ -25,6 +25,7 @@ KEEP_TEXT  = "의 레벨이 유지되었습니다"
 STATS_FILE = "enhance_stats.json"
 COMMAND = "/강화"
 GOLD_LIMIT = 0                 # 이 골드 미만이 되면 정지 (0 = 기능 비활성화, 예: 100_000_000)
+MAX_LEVEL = 20                 # 강화 최대 레벨 (OCR 오인식 필터용)
 
 # 전역 상태
 stop_requested = False
@@ -242,7 +243,7 @@ def read_chat_text(screenshot):
         return []
     img_array = np.array(screenshot)
     results = reader.readtext(img_array)
-    return [r[1] for r in results]
+    return [text for _, text, _ in results]
 
 
 def send_command(command, room_name):
@@ -259,14 +260,14 @@ def send_command(command, room_name):
             repeat with w in wins
                 if name of w contains "{room_name}" then
                     perform action "AXRaise" of w
-                    delay 0.1
+                    delay 0.05
                     set inputScroll to UI element 11 of w
                     set tf to UI element 1 of inputScroll
                     set value of tf to "{command}"
                     set focused of tf to true
-                    delay 0.4
+                    delay 0.25
                     key code 36
-                    delay 0.2
+                    delay 0.1
                     key code 36
                     exit repeat
                 end if
@@ -287,11 +288,21 @@ def parse_level_change(texts):
     for pattern in arrow_patterns:
         match = re.search(pattern, combined)
         if match:
-            return int(match.group(1)), int(match.group(2))
+            from_lvl, to_lvl = int(match.group(1)), int(match.group(2))
+            if to_lvl > MAX_LEVEL or from_lvl > MAX_LEVEL:
+                print(f"[OCR 보정] 레벨 범위 초과 무시: +{from_lvl} -> +{to_lvl} (최대 +{MAX_LEVEL})")
+                continue
+            if to_lvl != from_lvl + 1:
+                print(f"[OCR 보정] 1단위 증가 아님 무시: +{from_lvl} -> +{to_lvl}")
+                continue
+            return from_lvl, to_lvl
     if '강화에 성공' in combined or '성공하셨습니다' in combined:
         match = re.search(r'\[\+(\d+)\]', combined)
         if match:
             to_lvl = int(match.group(1))
+            if to_lvl > MAX_LEVEL:
+                print(f"[OCR 보정] 레벨 범위 초과 무시: [+{to_lvl}] (최대 +{MAX_LEVEL})")
+                return None, None
             return to_lvl - 1, to_lvl
     return None, None
 
@@ -310,21 +321,24 @@ def scan_current_level(texts, current_level=None):
     last_to = None
     for pattern in arrow_patterns:
         for m in re.finditer(pattern, combined):
-            last_to = int(m.group(2))
+            val = int(m.group(2))
+            if val <= MAX_LEVEL:
+                last_to = val
     if last_to is not None:
         if current_level is not None and abs(last_to - current_level) > 3:
             print(f"[동기화 무시] 화살표 패턴 +{last_to} (현재 +{current_level}에서 ±3 초과, 오인식 의심)")
             return None
         return last_to
-    # '[+N]' 패턴 중 가장 큰 값
     matches = re.findall(r'\[\+(\d+)\]', combined)
     if matches:
-        candidates = [int(x) for x in matches]
+        candidates = [int(x) for x in matches if int(x) <= MAX_LEVEL]
         if current_level is not None:
             candidates = [v for v in candidates if abs(v - current_level) <= 3]
             if not candidates:
                 print(f"[동기화 무시] '[+N]' 패턴 모두 ±3 초과 (현재 +{current_level}, 오인식 의심)")
                 return None
+        if not candidates:
+            return None
         return max(candidates)
     return None
 
@@ -544,14 +558,14 @@ def run_macro(stats):
             print(f"[전송] {COMMAND} (현재: +{current_level}{gold_display})")
             send_command(COMMAND, TARGET_CHAT_ROOM)
 
-            time.sleep(0.1)
+            time.sleep(0.05)
             start_time = time.time()
             result = 'waiting'
             from_lvl, to_lvl = None, None
             texts = last_texts.copy()
             snapshot_texts = last_texts.copy()
             while result in ('waiting', 'unknown') and (time.time() - start_time) < 5:
-                time.sleep(0.2)
+                time.sleep(0.1)
                 screenshot = capture_chat_area(bounds)
                 texts = read_chat_text(screenshot)
                 result, from_lvl, to_lvl = check_response(texts, snapshot_texts, current_level)
@@ -598,7 +612,9 @@ def run_macro(stats):
                 match = re.search(r'\[\+(\d+)\]', combined_all)
                 if match:
                     scanned = int(match.group(1))
-                    if scanned != current_level:
+                    if scanned > MAX_LEVEL:
+                        print(f"[OCR 보정] 타임아웃 스캔 범위 초과 무시: +{scanned} (최대 +{MAX_LEVEL})")
+                    elif scanned != current_level:
                         print(f"[동기화] +{current_level} -> +{scanned}")
                         current_level = scanned
                 if current_level >= TARGET_LEVEL:
@@ -606,7 +622,7 @@ def run_macro(stats):
                     print(f"  목표 달성 (동기화)! +{current_level} (목표: +{TARGET_LEVEL})")
                     print(f"{'='*55}\n")
                     break
-            time.sleep(random.uniform(0.1, 0.2))
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         print("\n\n[중단됨]")
