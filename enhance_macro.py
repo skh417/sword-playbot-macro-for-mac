@@ -18,7 +18,7 @@ import threading
 # 설정
 # ============================================================
 TARGET_CHAT_ROOM = ""
-TARGET_LEVEL = 13              # 이 레벨 도달하면 정지 (예: 4면 +4 도달시 정지)
+TARGET_LEVEL = 15              # 이 레벨 도달하면 정지 (예: 4면 +4 도달시 정지)
 SUCCESS_TEXT = "강화에 성공"
 FAIL_TEXT = "강화 파괴"
 KEEP_TEXT  = "의 레벨이 유지되었습니다"
