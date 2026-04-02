@@ -3,7 +3,6 @@
 """
 
 import pyautogui
-import pyperclip
 import subprocess
 import time
 import random
@@ -12,7 +11,6 @@ import json
 import os
 import re
 import numpy as np
-import threading
 
 # ============================================================
 # 설정
@@ -30,10 +28,22 @@ MAX_LEVEL = 20                 # 강화 최대 레벨 (OCR 오인식 필터용)
 # 전역 상태
 stop_requested = False
 
-# OCR 리더 초기화
-print("OCR 모델 로딩 중...")
-reader = easyocr.Reader(['ko', 'en'], gpu=False)
-print("OCR 모델 로딩 완료!\n")
+# OCR 리더 (lazy 초기화)
+reader = None
+
+
+def get_reader():
+    global reader
+    if reader is None:
+        print("OCR 모델 로딩 중...")
+        reader = easyocr.Reader(['ko', 'en'], gpu=False)
+        print("OCR 모델 로딩 완료!\n")
+    return reader
+
+
+def escape_applescript(s):
+    """AppleScript 문자열 인젝션 방지"""
+    return s.replace('\\', '\\\\').replace('"', '\\"')
 
 
 # ============================================================
@@ -49,7 +59,8 @@ class EnhanceStats:
             try:
                 with open(self.filename, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except:
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[경고] 통계 파일 로드 실패: {e}")
                 pass
         return {
             "level_stats": {},
@@ -155,17 +166,19 @@ def run_applescript(script):
     try:
         result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
         return result.stdout.strip()
-    except:
+    except subprocess.SubprocessError as e:
+        print(f"[오류] AppleScript 실행 실패: {e}")
         return None
 
 
 def find_kakao_window(room_name):
+    safe_name = escape_applescript(room_name)
     script = f'''
     tell application "System Events"
         tell process "KakaoTalk"
             set winNames to name of every window
             repeat with wName in winNames
-                if wName contains "{room_name}" then
+                if wName contains "{safe_name}" then
                     return wName as text
                 end if
             end repeat
@@ -178,13 +191,14 @@ def find_kakao_window(room_name):
 
 
 def activate_kakao_window(room_name):
+    safe_name = escape_applescript(room_name)
     script = f'''
     tell application "System Events"
         tell process "KakaoTalk"
             set frontmost to true
             set wins to every window
             repeat with w in wins
-                if name of w contains "{room_name}" then
+                if name of w contains "{safe_name}" then
                     perform action "AXRaise" of w
                     return true
                 end if
@@ -198,12 +212,13 @@ def activate_kakao_window(room_name):
 
 
 def get_window_bounds(room_name):
+    safe_name = escape_applescript(room_name)
     script = f'''
     tell application "System Events"
         tell process "KakaoTalk"
             set wins to every window
             repeat with w in wins
-                if name of w contains "{room_name}" then
+                if name of w contains "{safe_name}" then
                     set pos to position of w
                     set sz to size of w
                     return (item 1 of pos as string) & "," & (item 2 of pos as string) & "," & (item 1 of sz as string) & "," & (item 2 of sz as string)
@@ -223,7 +238,7 @@ def get_window_bounds(room_name):
                 'width': int(float(parts[2])),
                 'height': int(float(parts[3]))
             }
-        except:
+        except (ValueError, IndexError):
             pass
     return None
 
@@ -242,7 +257,7 @@ def read_chat_text(screenshot):
     if screenshot is None:
         return []
     img_array = np.array(screenshot)
-    results = reader.readtext(img_array)
+    results = get_reader().readtext(img_array)
     return [text for _, text, _ in results]
 
 
@@ -252,18 +267,20 @@ def send_command(command, room_name):
     1단계: 텍스트 입력 -> 딜레이 -> Enter (자동완성에서 명령어 선택)
     2단계: 다시 딜레이 -> Enter (전송)
     """
+    safe_name = escape_applescript(room_name)
+    safe_command = escape_applescript(command)
     script = f'''
     tell application "System Events"
         tell process "KakaoTalk"
             set frontmost to true
             set wins to every window
             repeat with w in wins
-                if name of w contains "{room_name}" then
+                if name of w contains "{safe_name}" then
                     perform action "AXRaise" of w
                     delay 0.05
                     set inputScroll to UI element 11 of w
                     set tf to UI element 1 of inputScroll
-                    set value of tf to "{command}"
+                    set value of tf to "{safe_command}"
                     set focused of tf to true
                     delay 0.25
                     key code 36
@@ -391,23 +408,6 @@ def check_response(texts, last_texts, current_level=None):
     return 'unknown', None, None
 
 # ============================================================
-# 입력 스레드
-# ============================================================
-def input_thread_func():
-    """별도 스레드에서 입력 받기"""
-    global stop_requested
-    while True:
-        try:
-            cmd = input().strip().lower()
-            if cmd in ['stop', 's', '2']:
-                stop_requested = True
-                print("\n[정지 요청됨]")
-                break
-        except:
-            break
-
-
-# ============================================================
 # 메인
 # ============================================================
 def main():
@@ -469,7 +469,7 @@ def main():
                 new_goal = int(input("목표 레벨 (숫자만): ").strip())
                 TARGET_LEVEL = new_goal
                 print(f"목표 변경: +{TARGET_LEVEL}")
-            except:
+            except ValueError:
                 print("숫자를 입력하세요")
 
         elif cmd in ['6', 'gold']:
@@ -480,7 +480,7 @@ def main():
                     print(f"골드 리밋 변경: {GOLD_LIMIT:,}G 미만이 되면 정지")
                 else:
                     print("골드 리밋 비활성화")
-            except:
+            except ValueError:
                 print("숫자를 입력하세요")
 
         elif cmd in ['7', 'quit', 'q']:
@@ -590,6 +590,7 @@ def run_macro(stats):
                     current_level = to_lvl
                     print(f"[성공] +{from_lvl} -> +{to_lvl}")
                 else:
+                    stats.record_success(current_level, current_level + 1)
                     current_level += 1
                     print(f"[성공] 추정 +{current_level}")
                 if current_level >= TARGET_LEVEL:
@@ -598,7 +599,7 @@ def run_macro(stats):
                     print(f"{'='*55}\n")
                     break
             elif result == 'destroy':
-                destroy_lvl = from_lvl if from_lvl else current_level
+                destroy_lvl = from_lvl if from_lvl is not None else current_level
                 stats.record_destroy(destroy_lvl)
                 print(f"[파괴] +{destroy_lvl}에서 파괴됨")
                 current_level = 0
@@ -614,6 +615,11 @@ def run_macro(stats):
                     scanned = int(match.group(1))
                     if scanned > MAX_LEVEL:
                         print(f"[OCR 보정] 타임아웃 스캔 범위 초과 무시: +{scanned} (최대 +{MAX_LEVEL})")
+                    elif scanned < current_level:
+                        print(f"[파괴 감지] +{current_level} -> +{scanned} (타임아웃 스캔)")
+                        stats.record_destroy(current_level)
+                        current_level = scanned
+                        just_destroyed = True
                     elif scanned != current_level:
                         print(f"[동기화] +{current_level} -> +{scanned}")
                         current_level = scanned
