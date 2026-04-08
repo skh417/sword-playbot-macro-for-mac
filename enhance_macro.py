@@ -1,16 +1,29 @@
 """
-카카오톡 강화 매크로 (macOS 버전 - 수정본)
+카카오톡 강화 매크로 (macOS 버전 - AX API)
 """
 
-import pyautogui
 import subprocess
 import time
 import random
-import easyocr
 import json
 import os
 import re
-import numpy as np
+
+# AX API (pyobjc) — 채팅 텍스트 직접 읽기
+try:
+    import ApplicationServices as AX
+    AX_AVAILABLE = True
+except ImportError:
+    AX_AVAILABLE = False
+
+# OCR fallback (AX API 불가 시)
+try:
+    import pyautogui
+    import easyocr
+    import numpy as np
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 # ============================================================
 # 설정
@@ -27,18 +40,118 @@ MAX_LEVEL = 20                 # 강화 최대 레벨 (OCR 오인식 필터용)
 
 # 전역 상태
 stop_requested = False
+use_ax_api = AX_AVAILABLE  # AX API 사용 여부 (실패 시 자동 OCR fallback)
 
-# OCR 리더 (lazy 초기화)
+# AX API 캐시 (매 루프마다 PID/앱 재생성 방지)
+_ax_app = None
+_ax_pid = None
+
+# OCR 리더 (lazy 초기화, fallback용)
 reader = None
 
 
 def get_reader():
     global reader
+    if not OCR_AVAILABLE:
+        raise RuntimeError("OCR 라이브러리(easyocr, pyautogui)가 설치되지 않았습니다.")
     if reader is None:
         print("OCR 모델 로딩 중...")
         reader = easyocr.Reader(['ko', 'en'], gpu=False)
         print("OCR 모델 로딩 완료!\n")
     return reader
+
+
+# ============================================================
+# AX API 텍스트 읽기
+# ============================================================
+def _get_ax_app():
+    """카카오톡 AX 앱 요소를 캐싱하여 반환."""
+    global _ax_app, _ax_pid
+    result = subprocess.run(['pgrep', '-x', 'KakaoTalk'], capture_output=True, text=True)
+    pid_str = result.stdout.strip()
+    if not pid_str:
+        _ax_app = None
+        _ax_pid = None
+        return None
+    pid = int(pid_str.split('\n')[0])
+    if pid != _ax_pid:
+        _ax_app = AX.AXUIElementCreateApplication(pid)
+        _ax_pid = pid
+    return _ax_app
+
+
+def _ax_get(element, attr):
+    """AX 요소 속성을 안전하게 가져오기."""
+    err, value = AX.AXUIElementCopyAttributeValue(element, attr, None)
+    return value if err == 0 else None
+
+
+def _ax_extract_texts(element, texts, depth=0, max_depth=5):
+    """AX 요소에서 텍스트를 재귀 추출."""
+    if depth > max_depth:
+        return
+    value = _ax_get(element, "AXValue")
+    if value and isinstance(value, str) and value.strip():
+        texts.append(value.strip())
+    title = _ax_get(element, "AXTitle")
+    if title and isinstance(title, str) and title.strip():
+        texts.append(title.strip())
+    children = _ax_get(element, "AXChildren")
+    if children:
+        for child in children:
+            _ax_extract_texts(child, texts, depth + 1, max_depth)
+
+
+def _ax_find_chat_table(app, room_name):
+    """채팅방의 AXTable 요소를 찾아 반환."""
+    windows = _ax_get(app, "AXWindows")
+    if not windows:
+        return None
+    safe_name = room_name
+    for win in windows:
+        win_title = _ax_get(win, "AXTitle") or ""
+        if safe_name in str(win_title):
+            children = _ax_get(win, "AXChildren")
+            if not children:
+                continue
+            for child in children:
+                role = _ax_get(child, "AXRole") or ""
+                if "ScrollArea" not in str(role):
+                    continue
+                scroll_children = _ax_get(child, "AXChildren")
+                if not scroll_children:
+                    continue
+                for sc in scroll_children:
+                    if "Table" in str(_ax_get(sc, "AXRole") or ""):
+                        return sc
+    return None
+
+
+def read_chat_text_ax(room_name, last_n=5):
+    """AX API로 채팅 텍스트를 직접 읽어 리스트로 반환.
+
+    Args:
+        room_name: 채팅방 이름
+        last_n: 마지막 N개 행만 읽기 (기본 5행, 약 44ms)
+
+    Returns:
+        list[str]: 텍스트 리스트 (read_chat_text와 호환)
+        None이면 AX API 실패
+    """
+    app = _get_ax_app()
+    if app is None:
+        return None
+    table = _ax_find_chat_table(app, room_name)
+    if table is None:
+        return None
+    rows = _ax_get(table, "AXRows")
+    if not rows:
+        return None
+    target_rows = rows[-last_n:] if len(rows) >= last_n else rows
+    texts = []
+    for row in target_rows:
+        _ax_extract_texts(row, texts)
+    return texts
 
 
 def escape_applescript(s):
@@ -411,12 +524,20 @@ def check_response(texts, last_texts, current_level=None):
 # 메인
 # ============================================================
 def main():
-    global TARGET_CHAT_ROOM, TARGET_LEVEL, GOLD_LIMIT, stop_requested
+    global TARGET_CHAT_ROOM, TARGET_LEVEL, GOLD_LIMIT, stop_requested, use_ax_api
 
     stats = EnhanceStats()
 
     print("=" * 55)
     print("  카카오톡 강화 매크로")
+    if AX_AVAILABLE:
+        print("  [AX API 모드] 고속 텍스트 읽기 활성화")
+    elif OCR_AVAILABLE:
+        print("  [OCR 모드] 화면 캡처 기반")
+    else:
+        print("  [오류] AX API(pyobjc)와 OCR(easyocr) 모두 없습니다.")
+        print("  pip install pyobjc 또는 pip install easyocr pyautogui numpy")
+        return
     print("=" * 55)
 
     # 채팅방 설정
@@ -501,6 +622,10 @@ def run_macro(stats):
         print(f"  골드 리밋: {GOLD_LIMIT:,}G 미만이 되면 정지")
     else:
         print("  골드 리밋: 없음")
+    if use_ax_api:
+        print("  읽기 모드: AX API (고속, 백그라운드 가능)")
+    else:
+        print("  읽기 모드: OCR (화면 캡처)")
     print("  정지: Ctrl+C")
     print("=" * 55 + "\n")
     # 현재 레벨 수동 입력
@@ -523,28 +648,44 @@ def run_macro(stats):
     last_known_gold = None
     just_destroyed = False  # 파괴 직후 루프에서 OCR 스캔 동기화 스킵 플래깅
 
+    def _read_texts():
+        """현재 모드에 따라 채팅 텍스트를 읽는 헬퍼."""
+        global use_ax_api
+        if use_ax_api:
+            result = read_chat_text_ax(TARGET_CHAT_ROOM, last_n=5)
+            if result is not None:
+                return result
+            # AX API 실패 → OCR fallback
+            if OCR_AVAILABLE:
+                print("[AX API 실패] OCR fallback으로 전환")
+                use_ax_api = False
+                bounds = get_window_bounds(TARGET_CHAT_ROOM)
+                return read_chat_text(capture_chat_area(bounds)) if bounds else []
+            return []
+        else:
+            bounds = get_window_bounds(TARGET_CHAT_ROOM)
+            return read_chat_text(capture_chat_area(bounds)) if bounds else []
+
     try:
         while not stop_requested:
-            # 창 확인
+            # 창 확인 (AX API 모드에서도 창 존재 확인용)
             bounds = get_window_bounds(TARGET_CHAT_ROOM)
             if not bounds:
                 print("[오류] 채팅방 창을 찾을 수 없음")
                 break
 
-            # 명령어 전송 전: OCR로 현재 레벨 동기화
-            pre_screenshot = capture_chat_area(bounds)
-            pre_texts = read_chat_text(pre_screenshot)
+            # 명령어 전송 전: 현재 레벨 동기화
+            pre_texts = _read_texts()
             if just_destroyed:
-                # 파괴 직후는 화면에 이전 레벨 메시지가 남아있어 OCR 오독 가능 -> 스킵
                 just_destroyed = False
             else:
                 scanned_level = scan_current_level(pre_texts, current_level)
                 if scanned_level is not None and scanned_level != current_level:
                     if scanned_level > current_level:
-                        print(f"[동기화] +{current_level} -> +{scanned_level} (OCR 스캔)")
+                        print(f"[동기화] +{current_level} -> +{scanned_level}")
                         current_level = scanned_level
                     else:
-                        print(f"[동기화 무시] OCR 스캔 +{scanned_level} < 현재 +{current_level} (오독 의심)")
+                        print(f"[동기화 무시] 스캔 +{scanned_level} < 현재 +{current_level}")
             last_texts = pre_texts
 
             # 목표 레벨 도달 확인 (전송 전)
@@ -566,8 +707,7 @@ def run_macro(stats):
             snapshot_texts = last_texts.copy()
             while result in ('waiting', 'unknown') and (time.time() - start_time) < 5:
                 time.sleep(0.1)
-                screenshot = capture_chat_area(bounds)
-                texts = read_chat_text(screenshot)
+                texts = _read_texts()
                 result, from_lvl, to_lvl = check_response(texts, snapshot_texts, current_level)
             last_texts = texts.copy()
 
