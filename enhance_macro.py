@@ -186,10 +186,15 @@ class EnhanceStats:
         with open(self.filename, 'w', encoding='utf-8') as f:
             json.dump(self.data, f, ensure_ascii=False, indent=2)
 
+    def _ensure_level(self, level_key):
+        if level_key not in self.data["level_stats"]:
+            self.data["level_stats"][level_key] = {"success": 0, "fail": 0, "keep": 0}
+        elif "keep" not in self.data["level_stats"][level_key]:
+            self.data["level_stats"][level_key]["keep"] = 0
+
     def record_success(self, from_level, to_level):
         level_key = str(from_level)
-        if level_key not in self.data["level_stats"]:
-            self.data["level_stats"][level_key] = {"success": 0, "fail": 0}
+        self._ensure_level(level_key)
         self.data["level_stats"][level_key]["success"] += 1
         self.data["total_attempts"] += 1
         if to_level > self.data["max_level_reached"]:
@@ -198,11 +203,17 @@ class EnhanceStats:
 
     def record_destroy(self, at_level):
         level_key = str(at_level)
-        if level_key not in self.data["level_stats"]:
-            self.data["level_stats"][level_key] = {"success": 0, "fail": 0}
+        self._ensure_level(level_key)
         self.data["level_stats"][level_key]["fail"] += 1
         self.data["total_attempts"] += 1
         self.data["total_destroys"] += 1
+        self.save()
+
+    def record_keep(self, at_level):
+        level_key = str(at_level)
+        self._ensure_level(level_key)
+        self.data["level_stats"][level_key]["keep"] += 1
+        self.data["total_attempts"] += 1
         self.save()
 
     def get_success_rate(self, level):
@@ -210,7 +221,7 @@ class EnhanceStats:
         if level_key not in self.data["level_stats"]:
             return None
         stats = self.data["level_stats"][level_key]
-        total = stats["success"] + stats["fail"]
+        total = stats["success"] + stats["fail"] + stats.get("keep", 0)
         return stats["success"] / total if total > 0 else None
 
     def simulate_to_20(self, simulations=10000):
@@ -255,10 +266,11 @@ class EnhanceStats:
                 key = str(level)
                 if key in self.data["level_stats"]:
                     s = self.data["level_stats"][key]
-                    total = s["success"] + s["fail"]
+                    keep = s.get("keep", 0)
+                    total = s["success"] + s["fail"] + keep
                     rate = (s["success"] / total * 100) if total > 0 else 0
                     bar = "#" * int(rate/5) + "-" * (20 - int(rate/5))
-                    print(f"  +{level:2d}->+{level+1:2d}: [{bar}] {rate:5.1f}% ({s['success']}/{total})")
+                    print(f"  +{level:2d}->+{level+1:2d}: [{bar}] {rate:5.1f}% ({s['success']}/{total}, 유지{keep}, 파괴{s['fail']})")
 
             print("\n  [+20 도달 예측]")
             sr, avg = self.simulate_to_20()
@@ -746,6 +758,7 @@ def run_macro(stats):
                 just_destroyed = True  # 다음 루프 OCR 스캔 스킵
             elif result == 'keep':
                 keep_lvl = from_lvl if from_lvl is not None else current_level
+                stats.record_keep(keep_lvl)
                 print(f"[유지] +{keep_lvl} 레벨 유지됨")
             elif result == 'waiting':
                 print("[시간초과] 응답 없음 - 화면 스캔으로 레벨 동기화")
