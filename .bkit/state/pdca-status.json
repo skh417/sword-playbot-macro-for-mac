@@ -1,0 +1,207 @@
+{
+  "version": "3.0",
+  "lastUpdated": "2026-04-08T06:38:57.442Z",
+  "activeFeatures": [
+    "kakao_macro"
+  ],
+  "primaryFeature": "kakao_macro",
+  "features": {
+    "kakao_macro": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T03:00:12.186Z",
+        "lastUpdated": "2026-04-08T06:38:57.442Z"
+      },
+      "lastFile": "/Users/khsim/Desktop/kakao_macro/enhance_macro.py"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-02T02:56:02.677Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-08T06:38:57.442Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-02T03:00:12.187Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:00:40.744Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:00:46.483Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:00:52.333Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:00:59.389Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:04.451Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:10.397Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:22.613Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:27.461Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:38.567Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:46.305Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:01:52.016Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:02:03.300Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:02:11.047Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:02:16.667Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T03:02:22.412Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:12:51.122Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:18:57.865Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:20:59.029Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:21:21.399Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:21:27.233Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:21:51.778Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:22:00.323Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:38:42.757Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:38:51.360Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-08T06:38:57.442Z",
+      "feature": "kakao_macro",
+      "phase": "do",
+      "action": "updated"
+    }
+  ],
+  "stateMachine": {
+    "defaultWorkflow": "default",
+    "activeWorkflows": {},
+    "totalTransitions": 0
+  },
+  "automation": {
+    "globalLevel": 2,
+    "trustScore": 40,
+    "pendingApprovals": 0,
+    "lastGateResult": null
+  },
+  "team": {
+    "enabled": true,
+    "stateFile": ".bkit/runtime/agent-state.json",
+    "eventsFile": ".bkit/runtime/agent-events.jsonl"
+  }
+}
