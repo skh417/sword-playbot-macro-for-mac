@@ -29,5 +29,8 @@ env/
 # EasyOCR model cache
 .EasyOCR/
 
+# bkit audit logs
+.bkit/audit/
+
 # 통계 데이터 (개인 플레이 기록 - 업로드 제외)
 enhance_stats.json
